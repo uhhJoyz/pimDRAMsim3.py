@@ -2,3 +2,6 @@
 	path = ext/SuperLU_MT_3.1
 	url = https://github.com/umd-memsys/SuperLU_MT_3.1.git
 	ignore = dirty
+[submodule "pimDRAMsim3.py"]
+	path = pimDRAMsim3.py
+	url = git@github.com:uhhJoyz/pimDRAMsim3.py
