@@ -1,4 +1,5 @@
 #include "command_queue.h"
+#include <common.h>
 
 namespace dramsim3 {
 
@@ -31,6 +32,28 @@ CommandQueue::CommandQueue(int channel_id, const Config& config,
         cmd_queue.reserve(config_.cmd_queue_size);
         queues_.push_back(cmd_queue);
     }
+}
+
+std::vector<Command> CommandQueue::GetPIMCommandsToIssue() {
+    std::vector<Command> cmds;
+    // num_queues_ = number of banks in PER_BANK architectures
+    cmds.reserve(num_queues_);
+    for (int i = 0; i < num_queues_; i++) {
+        auto& queue = GetNextQueue();
+        if (is_in_ref_) {
+            if (ref_q_indices_.find(queue_idx_) != ref_q_indices_.end()) {
+                continue;
+            }
+        }
+        auto cmd = PimGetFirstInQueue(queue);
+        if (cmd.IsValid()) {
+            if (cmd.IsReadWrite()) {
+                EraseRWCommand(cmd);
+            }
+            cmds.push_back(cmd);
+        }
+    }
+    return cmds;
 }
 
 Command CommandQueue::GetCommandToIssue() {
@@ -114,6 +137,11 @@ bool CommandQueue::WillAcceptCommand(int rank, int bankgroup, int bank) const {
     return queues_[q_idx].size() < queue_size_;
 }
 
+bool CommandQueue::QueueIsEmpty(int rank, int bankgroup, int bank) const {
+    int q_idx = GetQueueIndex(rank, bankgroup, bank);
+    return queues_[q_idx].size() == 0;
+}
+
 bool CommandQueue::QueueEmpty() const {
     for (const auto q : queues_) {
         if (!q.empty()) {
@@ -173,6 +201,22 @@ int CommandQueue::GetQueueIndex(int rank, int bankgroup, int bank) const {
 CMDQueue& CommandQueue::GetQueue(int rank, int bankgroup, int bank) {
     int index = GetQueueIndex(rank, bankgroup, bank);
     return queues_[index];
+}
+
+Command CommandQueue::PimGetFirstInQueue(CMDQueue &queue) const {
+    for (auto cmd_it = queue.begin(); cmd_it != queue.end(); cmd_it++) {
+        Command cmd = channel_state_.GetReadyCommand(*cmd_it, clk_);
+        if (!cmd.IsValid()) {
+            continue;
+        }
+        if (cmd.cmd_type == CommandType::PRECHARGE) {
+            if (!ArbitratePrecharge(cmd_it, queue)) {
+                continue;
+            }
+        } 
+        return cmd;
+    }
+    return Command();
 }
 
 Command CommandQueue::GetFirstReadyInQueue(CMDQueue& queue) const {

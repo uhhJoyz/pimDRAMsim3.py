@@ -1,0 +1,5 @@
+/Users/joyz/work/research/PIM/dramsim-py/dramsim3/CMakeFiles/dramsim3.dir
+/Users/joyz/work/research/PIM/dramsim-py/dramsim3/CMakeFiles/dramsim3main.dir
+/Users/joyz/work/research/PIM/dramsim-py/dramsim3/CMakeFiles/dramsim3test.dir
+/Users/joyz/work/research/PIM/dramsim-py/dramsim3/CMakeFiles/edit_cache.dir
+/Users/joyz/work/research/PIM/dramsim-py/dramsim3/CMakeFiles/rebuild_cache.dir

@@ -30,9 +30,16 @@ class BaseDRAMSystem {
 
     virtual bool WillAcceptTransaction(uint64_t hex_addr,
                                        bool is_write) const = 0;
-    virtual bool AddTransaction(uint64_t hex_addr, bool is_write) = 0;
+    virtual bool AddTransaction(uint64_t hex_addr, bool is_write, bool is_pim = false) = 0;
     virtual void ClockTick() = 0;
     int GetChannel(uint64_t hex_addr) const;
+    bool GetPimMode() const { return pim_mode_; };
+    void SetPimMode(bool mode) { 
+        for (uint64_t i = 0; i < ctrls_.size(); i++)
+            ctrls_[i]->SetPimMode(mode); 
+        pim_mode_ = mode; 
+    };
+    uint64_t GetClock() const { return clk_; };
 
     std::function<void(uint64_t req_id)> read_callback_, write_callback_;
     static int total_channels_;
@@ -44,6 +51,7 @@ class BaseDRAMSystem {
     Timing timing_;
     uint64_t parallel_cycles_;
     uint64_t serial_cycles_;
+    bool pim_mode_ = false;
 
 #ifdef THERMAL
     ThermalCalculator thermal_calc_;
@@ -65,7 +73,7 @@ class JedecDRAMSystem : public BaseDRAMSystem {
                     std::function<void(uint64_t)> write_callback);
     ~JedecDRAMSystem();
     bool WillAcceptTransaction(uint64_t hex_addr, bool is_write) const override;
-    bool AddTransaction(uint64_t hex_addr, bool is_write) override;
+    bool AddTransaction(uint64_t hex_addr, bool is_write, bool is_pim = false) override;
     void ClockTick() override;
 };
 
@@ -82,7 +90,7 @@ class IdealDRAMSystem : public BaseDRAMSystem {
                                bool is_write) const override {
         return true;
     };
-    bool AddTransaction(uint64_t hex_addr, bool is_write) override;
+    bool AddTransaction(uint64_t hex_addr, bool is_write, bool is_pim = false) override;
     void ClockTick() override;
 
    private:

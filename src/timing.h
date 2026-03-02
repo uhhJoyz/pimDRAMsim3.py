@@ -10,6 +10,7 @@ namespace dramsim3 {
 class Timing {
    public:
     Timing(const Config& config);
+    std::vector<std::vector<std::pair<CommandType, int> > > pim_mode;
     std::vector<std::vector<std::pair<CommandType, int> > > same_bank;
     std::vector<std::vector<std::pair<CommandType, int> > >
         other_banks_same_bankgroup;

@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/dramsim3test.dir/tests/test_config.cc.o CMakeFiles/dramsim3test.dir/tests/test_dramsys.cc.o CMakeFiles/dramsim3test.dir/tests/test_hmcsys.cc.o -o dramsim3test  -Wl,-rpath,/Users/joyz/work/research/PIM/dramsim-py/dramsim3 libdramsim3.dylib

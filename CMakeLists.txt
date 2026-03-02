@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.5.0)
 project(dramsim3)
 
 set(default_build_type "Release")
@@ -39,6 +39,7 @@ add_library(dramsim3 SHARED
     src/simple_stats.cc
     src/timing.cc
     src/memory_system.cc
+    src/pybindings.cc
 )
 
 if (THERMAL)
@@ -76,12 +77,12 @@ if (ADDR_TRACE)
 endif (ADDR_TRACE)
 
 
-target_include_directories(dramsim3 INTERFACE src)
+target_include_directories(dramsim3 PUBLIC src)
 target_compile_options(dramsim3 PRIVATE -Wall)
 target_link_libraries(dramsim3 PRIVATE inih format)
 set_target_properties(dramsim3 PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
-    CXX_STANDARD 11
+    CXX_STANDARD 17
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
 )

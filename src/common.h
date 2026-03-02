@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <iostream>
 #include <vector>
+#include <map>
 
 namespace dramsim3 {
 
@@ -69,6 +70,8 @@ struct Command {
     Command() : cmd_type(CommandType::SIZE), hex_addr(0) {}
     Command(CommandType cmd_type, const Address& addr, uint64_t hex_addr)
         : cmd_type(cmd_type), addr(addr), hex_addr(hex_addr) {}
+    Command(CommandType cmd_type, const Address& addr, uint64_t hex_addr, bool is_pim)
+        : cmd_type(cmd_type), addr(addr), hex_addr(hex_addr), is_pim(is_pim) {}
     // Command(const Command& cmd) {}
 
     bool IsValid() const { return cmd_type != CommandType::SIZE; }
@@ -93,6 +96,7 @@ struct Command {
     CommandType cmd_type;
     Address addr;
     uint64_t hex_addr;
+    bool is_pim;
 
     int Channel() const { return addr.channel; }
     int Rank() const { return addr.rank; }
@@ -110,19 +114,94 @@ struct Transaction {
         : addr(addr),
           added_cycle(0),
           complete_cycle(0),
-          is_write(is_write) {}
+          is_write(is_write),
+          is_pim(false) {}
+    Transaction(uint64_t addr, bool is_write, bool is_pim)
+        : addr(addr),
+          added_cycle(0),
+          complete_cycle(0),
+          is_write(is_write),
+          is_pim(is_pim) {}
     Transaction(const Transaction& tran)
         : addr(tran.addr),
           added_cycle(tran.added_cycle),
           complete_cycle(tran.complete_cycle),
-          is_write(tran.is_write) {}
+          is_write(tran.is_write),
+          is_pim(tran.is_pim) {}
     uint64_t addr;
     uint64_t added_cycle;
     uint64_t complete_cycle;
     bool is_write;
+    bool is_pim;
 
     friend std::ostream& operator<<(std::ostream& os, const Transaction& trans);
     friend std::istream& operator>>(std::istream& is, Transaction& trans);
+};
+
+template<typename K, typename V>
+class IntervalMap {
+  V val_begin_;
+public:
+  std::map<K, V> map_;
+
+  IntervalMap(V const& val) : val_begin_(val) {}
+  ~IntervalMap() {}
+
+  void Assign(K const& keyBegin, K const& keyEnd, V const& val) {
+    if (keyEnd <= keyBegin) {
+      return;
+    }
+
+    V valEnd = operator[](keyEnd);
+
+    auto iter_begin = (map_.insert_or_assign(keyBegin, val)).first;
+    auto iter_end = (map_.insert_or_assign(keyEnd, valEnd)).first;
+
+    iter_begin++;
+
+    iter_end = map_.erase(iter_begin, iter_end);
+    iter_end--;
+
+    for (int i = 0; i < 2; i++) {
+      if (iter_end != map_.begin()
+          && std::prev(iter_end, 1) -> second == iter_end -> second) {
+        iter_end = map_.erase(iter_end);
+      } else if (iter_end == map_.begin() && iter_end -> second == val_begin_) {
+        iter_end = map_.erase(iter_end);
+      } else if (iter_end != map_.end()) {
+        iter_end++;
+      }
+    }
+  }
+
+  void RemoveSurroundingInterval(K const& keyBegin, K const& keyEnd) {
+    if (keyEnd < keyBegin) {
+      return;
+    }
+
+    auto iter_begin = map_.lower_bound(keyBegin);
+    auto iter_end = map_.upper_bound(keyEnd);
+
+    iter_end = map_.erase(iter_begin, iter_end);
+  }
+
+  V const& operator[](K const& key) const {
+    auto it = map_.upper_bound(key);
+    if (it == map_.begin()) {
+      return val_begin_;
+    } else {
+      return (--it)->second;
+    }
+  }
+
+  K const& GetBaseAddr(K const& key) const {
+    auto it = map_.upper_bound(key);
+    if (it == map_.begin()) {
+      return 0u;
+    } else {
+      return (--it)->first;
+    }
+  }
 };
 
 }  // namespace dramsim3

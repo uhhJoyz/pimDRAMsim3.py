@@ -28,6 +28,7 @@ class Controller {
     Controller(int channel, const Config &config, const Timing &timing);
 #endif  // THERMAL
     void ClockTick();
+    void SetPimMode(bool mode);
     bool WillAcceptTransaction(uint64_t hex_addr, bool is_write) const;
     bool AddTransaction(Transaction trans);
     int QueueUsage() const;
@@ -51,13 +52,17 @@ class Controller {
     ThermalCalculator &thermal_calc_;
 #endif  // THERMAL
 
+    // specify whether transactions should be executed from PIM side or CPU side
+    bool is_pim_mode_ = false;
     // queue that takes transactions from CPU side
     bool is_unified_queue_;
     std::vector<Transaction> unified_queue_;
     std::vector<Transaction> read_queue_;
+    std::vector<Transaction> pim_queue_;
     std::vector<Transaction> write_buffer_;
 
     // transactions that are not completed, use map for convenience
+    std::multimap<uint64_t, Transaction> pending_pim_q_;
     std::multimap<uint64_t, Transaction> pending_rd_q_;
     std::multimap<uint64_t, Transaction> pending_wr_q_;
 

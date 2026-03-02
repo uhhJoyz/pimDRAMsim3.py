@@ -1,4 +1,5 @@
 #include "channel_state.h"
+#include <ios>
 
 namespace dramsim3 {
 ChannelState::ChannelState(const Config& config, const Timing& timing)
@@ -149,9 +150,15 @@ void ChannelState::UpdateTiming(const Command& cmd, uint64_t clk) {
         case CommandType::REFRESH_BANK:
             // TODO - simulator speed? - Speciazlize which of the below
             // functions to call depending on the command type  Same Bank
-            UpdateSameBankTiming(
-                cmd.addr, timing_.same_bank[static_cast<int>(cmd.cmd_type)],
-                clk);
+            if (is_pim_mode_) {
+                UpdateSameBankTiming(
+                    cmd.addr, timing_.pim_mode[static_cast<int>(cmd.cmd_type)],
+                    clk);
+            } else {
+                UpdateSameBankTiming(
+                    cmd.addr, timing_.same_bank[static_cast<int>(cmd.cmd_type)],
+                    clk);
+            }
 
             // Same Bankgroup other banks
             UpdateOtherBanksSameBankgroupTiming(
@@ -190,6 +197,30 @@ void ChannelState::UpdateSameBankTiming(
     const std::vector<std::pair<CommandType, int>>& cmd_timing_list,
     uint64_t clk) {
     for (auto cmd_timing : cmd_timing_list) {
+        std::string cmdname = "OTHER";
+        switch (cmd_timing.first) {
+        case CommandType::READ:
+            cmdname = "READ";
+            break;
+        case CommandType::WRITE:
+            cmdname = "WRITE";
+            break;
+        case CommandType::WRITE_PRECHARGE:
+            cmdname = "WRITE_PRE";
+            break;
+        case CommandType::READ_PRECHARGE:
+            cmdname = "READ_PRE";
+            break;
+        case CommandType::PRECHARGE:
+            cmdname = "PRECHARGE";
+            break;
+        }
+        // std::cerr << "----------------command found " 
+        //           << cmdname << " at cycle " 
+        //           << std::endl
+        //           << "----------------" << clk << " with list length " 
+        //           << cmd_timing_list.size() << " target time " << cmd_timing.second
+        //           << std::endl;
         bank_states_[addr.rank][addr.bankgroup][addr.bank].UpdateTiming(
             cmd_timing.first, clk + cmd_timing.second);
     }

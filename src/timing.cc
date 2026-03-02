@@ -1,11 +1,13 @@
 #include "timing.h"
 #include <algorithm>
+#include <common.h>
 #include <utility>
 
 namespace dramsim3 {
 
 Timing::Timing(const Config& config)
-    : same_bank(static_cast<int>(CommandType::SIZE)),
+    : pim_mode(static_cast<int>(CommandType::SIZE)),
+      same_bank(static_cast<int>(CommandType::SIZE)),
       other_banks_same_bankgroup(static_cast<int>(CommandType::SIZE)),
       other_bankgroups_same_rank(static_cast<int>(CommandType::SIZE)),
       other_ranks(static_cast<int>(CommandType::SIZE)),
@@ -74,6 +76,14 @@ Timing::Timing(const Config& config)
     }
 
     // command READ
+    pim_mode[static_cast<int>(CommandType::READ)] =
+        std::vector<std::pair<CommandType, int>> {
+            {CommandType::READ, config.tCCD_L},
+            {CommandType::WRITE, config.tCCD_L},
+            {CommandType::READ_PRECHARGE, config.tCCD_L},
+            {CommandType::WRITE_PRECHARGE, config.tCCD_L},
+            {CommandType::PRECHARGE, config.tCCD_L},
+        };
     same_bank[static_cast<int>(CommandType::READ)] =
         std::vector<std::pair<CommandType, int> >{
             {CommandType::READ, read_to_read_l},
@@ -101,6 +111,13 @@ Timing::Timing(const Config& config)
             {CommandType::WRITE_PRECHARGE, read_to_write_o}};
 
     // command WRITE
+    pim_mode[static_cast<int>(CommandType::WRITE)] =
+        std::vector<std::pair<CommandType, int>> {
+            {CommandType::READ, config.tCCD_L},
+            {CommandType::WRITE, config.tCCD_L},
+            {CommandType::READ_PRECHARGE, config.tCCD_L},
+            {CommandType::WRITE_PRECHARGE, config.tCCD_L},
+            {CommandType::PRECHARGE, config.tCCD_L}};
     same_bank[static_cast<int>(CommandType::WRITE)] =
         std::vector<std::pair<CommandType, int> >{
             {CommandType::READ, write_to_read_l},
@@ -128,6 +145,12 @@ Timing::Timing(const Config& config)
             {CommandType::WRITE_PRECHARGE, write_to_write_o}};
 
     // command READ_PRECHARGE
+    pim_mode[static_cast<int>(CommandType::READ_PRECHARGE)] =
+        std::vector<std::pair<CommandType, int>> {
+            {CommandType::ACTIVATE, readp_to_act},
+            {CommandType::REFRESH, read_to_activate},
+            {CommandType::REFRESH_BANK, read_to_activate},
+            {CommandType::SREF_ENTER, read_to_activate}};
     same_bank[static_cast<int>(CommandType::READ_PRECHARGE)] =
         std::vector<std::pair<CommandType, int> >{
             {CommandType::ACTIVATE, readp_to_act},
@@ -154,6 +177,12 @@ Timing::Timing(const Config& config)
             {CommandType::WRITE_PRECHARGE, read_to_write_o}};
 
     // command WRITE_PRECHARGE
+    pim_mode[static_cast<int>(CommandType::WRITE_PRECHARGE)] =
+        std::vector<std::pair<CommandType, int>> {
+            {CommandType::ACTIVATE, write_to_activate},
+            {CommandType::REFRESH, write_to_activate},
+            {CommandType::REFRESH_BANK, write_to_activate},
+            {CommandType::SREF_ENTER, write_to_activate}};
     same_bank[static_cast<int>(CommandType::WRITE_PRECHARGE)] =
         std::vector<std::pair<CommandType, int> >{
             {CommandType::ACTIVATE, write_to_activate},
@@ -180,6 +209,14 @@ Timing::Timing(const Config& config)
             {CommandType::WRITE_PRECHARGE, write_to_write_o}};
 
     // command ACTIVATE
+    pim_mode[static_cast<int>(CommandType::ACTIVATE)] =
+        std::vector<std::pair<CommandType, int>> {
+            {CommandType::ACTIVATE, activate_to_activate},
+            {CommandType::READ, activate_to_read},
+            {CommandType::WRITE, activate_to_write},
+            {CommandType::READ_PRECHARGE, activate_to_read},
+            {CommandType::WRITE_PRECHARGE, activate_to_write},
+            {CommandType::PRECHARGE, activate_to_precharge}};
     same_bank[static_cast<int>(CommandType::ACTIVATE)] =
         std::vector<std::pair<CommandType, int> >{
             {CommandType::ACTIVATE, activate_to_activate},
@@ -201,6 +238,12 @@ Timing::Timing(const Config& config)
             {CommandType::REFRESH_BANK, activate_to_refresh}};
 
     // command PRECHARGE
+    pim_mode[static_cast<int>(CommandType::PRECHARGE)] =
+        std::vector<std::pair<CommandType, int>> {
+            {CommandType::ACTIVATE, precharge_to_activate},
+            {CommandType::REFRESH, precharge_to_activate},
+            {CommandType::REFRESH_BANK, precharge_to_activate},
+            {CommandType::SREF_ENTER, precharge_to_activate}};
     same_bank[static_cast<int>(CommandType::PRECHARGE)] =
         std::vector<std::pair<CommandType, int> >{
             {CommandType::ACTIVATE, precharge_to_activate},

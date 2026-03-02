@@ -1,7 +1,9 @@
 #include "controller.h"
 #include <iomanip>
+#include <ios>
 #include <iostream>
 #include <limits>
+#include <utility>
 
 namespace dramsim3 {
 
@@ -27,6 +29,8 @@ Controller::Controller(int channel, const Config &config, const Timing &timing)
                           : RowBufPolicy::OPEN_PAGE),
       last_trans_clk_(0),
       write_draining_(0) {
+      // FIXME: this is a guess, but should actually be reserving a value closer to the total number of banks in a PIM device
+      pim_queue_.reserve(config_.trans_queue_size);
     if (is_unified_queue_) {
         unified_queue_.reserve(config_.trans_queue_size);
     } else {
@@ -72,21 +76,32 @@ void Controller::ClockTick() {
         cmd = cmd_queue_.FinishRefresh();
     }
 
-    // cannot find a refresh related command or there's no refresh
-    if (!cmd.IsValid()) {
-        cmd = cmd_queue_.GetCommandToIssue();
-    }
+    if (is_pim_mode_ && !cmd.IsValid()) {
+        std::vector<Command> cmds = cmd_queue_.GetPIMCommandsToIssue();
+        for (int i = 0; i < cmds.size(); i++) {
+            if (cmds[i].IsValid()) {
+                IssueCommand(cmds[i]);
+            }
+        }
+        // don't set this flag since no command was sent from the controller
+        // cmd_issued = true;
+    } else {
+        // cannot find a refresh related command or there's no refresh
+        if (!cmd.IsValid()) {
+            cmd = cmd_queue_.GetCommandToIssue();
+        }
+        
+        if (cmd.IsValid()) {
+            IssueCommand(cmd);
+            cmd_issued = true;
 
-    if (cmd.IsValid()) {
-        IssueCommand(cmd);
-        cmd_issued = true;
-
-        if (config_.enable_hbm_dual_cmd) {
-            auto second_cmd = cmd_queue_.GetCommandToIssue();
-            if (second_cmd.IsValid()) {
-                if (second_cmd.IsReadWrite() != cmd.IsReadWrite()) {
-                    IssueCommand(second_cmd);
-                    simple_stats_.Increment("hbm_dual_cmds");
+            if (config_.enable_hbm_dual_cmd) {
+                auto second_cmd = cmd_queue_.GetCommandToIssue();
+                if (second_cmd.IsValid()) {
+                    if (second_cmd.IsReadWrite() != cmd.IsReadWrite()) {
+                        IssueCommand(second_cmd);
+                        simple_stats_.Increment("hbm_dual_cmds");
+                    }
                 }
             }
         }
@@ -148,6 +163,11 @@ void Controller::ClockTick() {
     return;
 }
 
+void Controller::SetPimMode(bool mode) {
+    is_pim_mode_ = mode;
+    channel_state_.SetPimMode(mode);
+}
+
 bool Controller::WillAcceptTransaction(uint64_t hex_addr, bool is_write) const {
     if (is_unified_queue_) {
         return unified_queue_.size() < unified_queue_.capacity();
@@ -163,7 +183,11 @@ bool Controller::AddTransaction(Transaction trans) {
     simple_stats_.AddValue("interarrival_latency", clk_ - last_trans_clk_);
     last_trans_clk_ = clk_;
 
-    if (trans.is_write) {
+    if (trans.is_pim) {
+        pending_pim_q_.insert(std::make_pair(trans.addr, trans));
+        pim_queue_.push_back(trans);
+        return true;
+    } else if (trans.is_write) {
         if (pending_wr_q_.count(trans.addr) == 0) {  // can not merge writes
             pending_wr_q_.insert(std::make_pair(trans.addr, trans));
             if (is_unified_queue_) {
@@ -177,7 +201,7 @@ bool Controller::AddTransaction(Transaction trans) {
         return true;
     } else {  // read
         // if in write buffer, use the write buffer value
-        if (pending_wr_q_.count(trans.addr) > 0) {
+        if (pending_wr_q_.count(trans.addr) > 0 && !trans.is_pim) {
             trans.complete_cycle = clk_ + 1;
             return_queue_.push_back(trans);
             return true;
@@ -202,6 +226,23 @@ void Controller::ScheduleTransaction() {
             (write_buffer_.size() > 8 && cmd_queue_.QueueEmpty())) {
             write_draining_ = write_buffer_.size();
         }
+    }
+
+    // TODO: does this need additional logic? maybe scheduling 
+    // should differ depending on whether we're in PIM mode
+    if (is_pim_mode_) {
+        for (auto it = pim_queue_.begin(); it != pim_queue_.end(); it++) {
+            auto cmd = TransToCommand(*it);
+            // check if the queue is empty to enforce a strict ordering of PIM operations
+            if (cmd_queue_.QueueIsEmpty(cmd.Rank(), cmd.Bankgroup(),
+                                            cmd.Bank())) {
+                cmd_queue_.AddCommand(cmd);
+                it = pim_queue_.erase(it);
+                it--;
+                // break;
+            }
+        }
+      return;
     }
 
     std::vector<Transaction> &queue =
@@ -234,47 +275,111 @@ void Controller::IssueCommand(const Command &cmd) {
     // add channel in, only needed by thermal module
     thermal_calc_.UpdateCMDPower(channel_id_, cmd, clk_);
 #endif  // THERMAL
+        // std::cerr << "PIM WARNING: Non-deterministic behavior found in controller.cc's handling of PIM commands on line 284." << std::endl;
     // if read/write, update pending queue and return queue
     if (cmd.IsRead()) {
+        auto num_pims = pending_pim_q_.count(cmd.hex_addr);
         auto num_reads = pending_rd_q_.count(cmd.hex_addr);
-        if (num_reads == 0) {
-            std::cerr << cmd.hex_addr << " not in read queue! " << std::endl;
+        if (num_reads == 0 && num_pims == 0) {
+            std::cerr << cmd.hex_addr << " not in read or PIM queue! " << std::endl;
             exit(1);
         }
-        // if there are multiple reads pending return them all
-        while (num_reads > 0) {
-            auto it = pending_rd_q_.find(cmd.hex_addr);
-            it->second.complete_cycle = clk_ + config_.read_delay;
+        if (is_pim_mode_) {
+            if (num_pims == 0) {
+                std::cerr << "PIM command at address " 
+                          << cmd.hex_addr << " not in PIM queue! Terminating." 
+                          << std::endl;
+                exit(1);
+            }
+            auto it = pending_pim_q_.find(cmd.hex_addr);
+            // FIXME: this might not be right, see config definition in 
+            // configuration.h / related calculation. It also factors in the
+            // the burst timing, which might overestimate time to read
+            // std::cerr << "read delay: " << config_.tCCD_L << std::endl;
+            // std::cerr << "READ cycle started: " << clk_ << "\t cycle ended: " << clk_ + config_.tCCD_L << std::endl;
+            it->second.complete_cycle = clk_ + config_.tCCD_L;
             return_queue_.push_back(it->second);
-            pending_rd_q_.erase(it);
-            num_reads -= 1;
+            pending_pim_q_.erase(it);
+        } else {
+            if (num_reads == 0) {
+                std::cerr << "Read command at address " 
+                          << cmd.hex_addr << " not in read queue! Terminating." 
+                          << std::endl;
+                exit(1);
+            }
+            // if there are multiple reads pending return them all
+            while (num_reads > 0) {
+                auto it = pending_rd_q_.find(cmd.hex_addr);
+                it->second.complete_cycle = clk_ + config_.read_delay;
+                return_queue_.push_back(it->second);
+                pending_rd_q_.erase(it);
+                num_reads -= 1;
+            }
         }
     } else if (cmd.IsWrite()) {
-        // there should be only 1 write to the same location at a time
-        auto it = pending_wr_q_.find(cmd.hex_addr);
-        if (it == pending_wr_q_.end()) {
-            std::cerr << cmd.hex_addr << " not in write queue!" << std::endl;
-            exit(1);
+        if (is_pim_mode_) {
+            auto num_pims = pending_pim_q_.count(cmd.hex_addr);
+            if (num_pims == 0) {
+                std::cerr << "PIM write command at address " 
+                          << cmd.hex_addr << " not in PIM queue! Terminating." 
+                          << std::endl;
+                exit(1);
+            }
+            auto it = pending_pim_q_.find(cmd.hex_addr);
+            // FIXME: this might not be right, see config definition in 
+            // configuration.h / related calculation. It also factors in the
+            // the burst timing, which might overestimate time to read
+            it->second.complete_cycle = clk_ + config_.tCCD_L;
+            // std::cerr << "WRITE cycle started: " << clk_ << "\t cycle ended: " << clk_ + config_.tCCD_L << std::endl;
+            return_queue_.push_back(it->second);
+            pending_pim_q_.erase(it);
+        } else {
+            // there should be only 1 write to the same location at a time
+            auto it = pending_wr_q_.find(cmd.hex_addr);
+            if (it == pending_wr_q_.end()) {
+                std::cerr << cmd.hex_addr << " not in write queue!" << std::endl;
+                exit(1);
+            }
+            auto wr_lat = clk_ - it->second.added_cycle + config_.write_delay;
+            simple_stats_.AddValue("write_latency", wr_lat);
+            pending_wr_q_.erase(it);
         }
-        auto wr_lat = clk_ - it->second.added_cycle + config_.write_delay;
-        simple_stats_.AddValue("write_latency", wr_lat);
-        pending_wr_q_.erase(it);
     }
     // must update stats before states (for row hits)
     UpdateCommandStats(cmd);
+                    std::string cmdname = "OTHER";
+                    switch (cmd.cmd_type) {
+                    case CommandType::READ:
+                        cmdname = "READ";
+                        break;
+                    case CommandType::WRITE:
+                        cmdname = "WRITE";
+                        break;
+                    case CommandType::WRITE_PRECHARGE:
+                        cmdname = "WRITE_PRE";
+                        break;
+                    case CommandType::READ_PRECHARGE:
+                        cmdname = "READ_PRE";
+                        break;
+                    case CommandType::PRECHARGE:
+                        cmdname = "PRECHARGE";
+                        break;
+                    }
+                    // std::cerr << "+++++++++command found " << cmdname << " at cycle " << clk_ << std::endl;
     channel_state_.UpdateTimingAndStates(cmd, clk_);
 }
 
 Command Controller::TransToCommand(const Transaction &trans) {
     auto addr = config_.AddressMapping(trans.addr);
     CommandType cmd_type;
-    if (row_buf_policy_ == RowBufPolicy::OPEN_PAGE) {
+    if (row_buf_policy_ == RowBufPolicy::OPEN_PAGE 
+                        || is_pim_mode_) {
         cmd_type = trans.is_write ? CommandType::WRITE : CommandType::READ;
     } else {
         cmd_type = trans.is_write ? CommandType::WRITE_PRECHARGE
                                   : CommandType::READ_PRECHARGE;
     }
-    return Command(cmd_type, addr, trans.addr);
+    return Command(cmd_type, addr, trans.addr, trans.is_pim);
 }
 
 int Controller::QueueUsage() const { return cmd_queue_.QueueUsage(); }

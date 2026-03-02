@@ -18,10 +18,12 @@ class CommandQueue {
    public:
     CommandQueue(int channel_id, const Config& config,
                  const ChannelState& channel_state, SimpleStats& simple_stats);
+    std::vector<Command> GetPIMCommandsToIssue();
     Command GetCommandToIssue();
     Command FinishRefresh();
     void ClockTick() { clk_ += 1; };
     bool WillAcceptCommand(int rank, int bankgroup, int bank) const;
+    bool QueueIsEmpty(int rank, int bankgroup, int bank) const;
     bool AddCommand(Command cmd);
     bool QueueEmpty() const;
     int QueueUsage() const;
@@ -32,6 +34,7 @@ class CommandQueue {
                             const CMDQueue& queue) const;
     bool HasRWDependency(const CMDIterator& cmd_it,
                          const CMDQueue& queue) const;
+    Command PimGetFirstInQueue(CMDQueue& queue) const;
     Command GetFirstReadyInQueue(CMDQueue& queue) const;
     int GetQueueIndex(int rank, int bankgroup, int bank) const;
     CMDQueue& GetQueue(int rank, int bankgroup, int bank);

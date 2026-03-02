@@ -1,4 +1,5 @@
 #include "bankstate.h"
+#include <common.h>
 
 namespace dramsim3 {
 
@@ -165,6 +166,28 @@ void BankState::UpdateState(const Command& cmd) {
 }
 
 void BankState::UpdateTiming(CommandType cmd_type, uint64_t time) {
+    // std::cerr << "timings\n"
+    //           << "ACT:" << cmd_timing_[static_cast<int>(CommandType::ACTIVATE)] << std::endl
+    //           << "PRE:" << cmd_timing_[static_cast<int>(CommandType::PRECHARGE)] << std::endl
+    //           << "WRITE:" << cmd_timing_[static_cast<int>(CommandType::WRITE)] << std::endl
+    //           << "READ:" << cmd_timing_[static_cast<int>(CommandType::READ)] << std::endl
+    //           << "READ_PRE:" << cmd_timing_[static_cast<int>(CommandType::READ_PRECHARGE)] << std::endl
+    //           << "WRITE_PRE:" << cmd_timing_[static_cast<int>(CommandType::WRITE_PRECHARGE)] << std::endl
+    //           << std::endl;
+    // if (cmd_type == CommandType::WRITE_PRECHARGE) {
+    //     std::cerr << "Write precharge found at time " << time << std::endl;
+    //     cmd_type = CommandType::WRITE;
+    // }
+    // if (cmd_type == CommandType::READ_PRECHARGE) {
+    //     std::cerr << "Read precharge found at time " << time << std::endl;
+    //     cmd_type = CommandType::READ;
+    // }
+    // if (cmd_type == CommandType::READ) {
+    //     std::cerr << "Read [row open] found at time " << time << std::endl;
+    // }
+    // if (cmd_type == CommandType::WRITE) {
+    //     std::cerr << "Write [row open] found at time " << time << std::endl;
+    // }
     cmd_timing_[static_cast<int>(cmd_type)] =
         std::max(cmd_timing_[static_cast<int>(cmd_type)], time);
     return;

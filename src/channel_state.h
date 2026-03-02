@@ -18,6 +18,7 @@ class ChannelState {
     void UpdateTimingAndStates(const Command& cmd, uint64_t clk);
     bool ActivationWindowOk(int rank, uint64_t curr_time) const;
     void UpdateActivationTimes(int rank, uint64_t curr_time);
+    void SetPimMode(bool mode) { is_pim_mode_ = mode; }
     bool IsRowOpen(int rank, int bankgroup, int bank) const {
         return bank_states_[rank][bankgroup][bank].IsRowOpen();
     }
@@ -40,6 +41,7 @@ class ChannelState {
    private:
     const Config& config_;
     const Timing& timing_;
+    bool is_pim_mode_ = false;
 
     std::vector<bool> rank_is_sref_;
     std::vector<std::vector<std::vector<BankState> > > bank_states_;
