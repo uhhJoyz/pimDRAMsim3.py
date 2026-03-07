@@ -58,8 +58,6 @@ EXPORT memsys_t memsys_create(const char *config_file, const char *output_dir,
     delete w;
     return nullptr;
   }
-  uint64_t addr_start = w->memsys->GetBankLocalAddr(0, 0, 0, 1, 2);
-  uint64_t addr_end = w->memsys->GetBankLocalAddr(0, 0, 0, 1, 7);
   return reinterpret_cast<memsys_t>(w);
 }
 
@@ -70,8 +68,7 @@ EXPORT void memsys_get_byte_range_from_bank(memsys_t memsys, uint64_t channel,
                                             size_t *start_idx) {
   Wrapper *w = reinterpret_cast<Wrapper *>(memsys);
   if (w && w->memsys) {
-    uint64_t addr_start = w->memsys->GetBankLocalAddr(channel, rank, bankgroup,
-                                                      bank, hex_address);
+    uint64_t addr_start = w->memsys->GetSpatialGlobalAddr(channel, rank, bankgroup, bank, hex_address);
     w->memsys->GetBytes(addr_start, data_idx, start_idx);
   } else {
     (*data_idx) = -1;
@@ -84,9 +81,8 @@ EXPORT void memsys_mmap(memsys_t memsys, uint64_t channel, uint64_t rank,
                         int64_t data_idx, size_t length, size_t offset) {
   Wrapper *w = reinterpret_cast<Wrapper *>(memsys);
   if (w && w->memsys) {
-    uint64_t addr_start = w->memsys->GetBankLocalAddr(channel, rank, bankgroup,
-                                                      bank, hex_address);
-    uint64_t addr_end = addr_start + w->memsys->GetBankLocalAddr(0, 0, 0, 0, length);
+    uint64_t addr_start = w->memsys->GetSpatialGlobalAddr(channel, rank, bankgroup, bank, hex_address);
+    uint64_t addr_end = addr_start + w->memsys->GetSpatialGlobalAddr(0, 0, 0, 0, length);
     w->memsys->MMap(data_idx, addr_start, addr_end, offset);
   }
 }
@@ -96,9 +92,8 @@ EXPORT void memsys_munmap(memsys_t memsys, uint64_t channel, uint64_t rank,
                           size_t base_address, size_t length) {
   Wrapper *w = reinterpret_cast<Wrapper *>(memsys);
   if (w && w->memsys) {
-    uint64_t addr_start = w->memsys->GetBankLocalAddr(channel, rank, bankgroup,
-                                                      bank, base_address);
-    uint64_t addr_end = addr_start + w->memsys->GetBankLocalAddr(0, 0, 0, 0, length);
+    uint64_t addr_start = w->memsys->GetSpatialGlobalAddr(channel, rank, bankgroup, bank, base_address);
+    uint64_t addr_end = addr_start + w->memsys->GetSpatialGlobalAddr(0, 0, 0, 0, length);
     w->memsys->MUnmap(addr_start, addr_end);
   }
 }

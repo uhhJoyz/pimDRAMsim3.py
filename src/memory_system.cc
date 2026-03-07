@@ -62,10 +62,15 @@ void MemorySystem::GetLocationFromAddress(uint64_t* channel, uint64_t* rank,
     (*rank) = static_cast<uint64_t>(addr.rank);
     (*bankgroup) = static_cast<uint64_t>(addr.bankgroup);
     (*bank) = static_cast<uint64_t>(addr.bank);
-    (*local_addr) = static_cast<uint64_t>(
-                    (config_->ro_mask << config_->ro_pos 
-                    | config_->co_mask << config_->co_pos) 
-                    & (hex_addr >> config_->shift_bits));
+    uint64_t pos = count_ones(config_->co_mask);
+    (*local_addr) = static_cast<uint64_t>((addr.row << pos) + addr.column);
+    uint64_t r = addr.row;
+    uint64_t c = addr.column;
+    uint64_t laddr2 = (r << config_->ro_pos) + (c << config_->co_pos);
+    std::cerr << "Decoded bank: " << std::hex << (*bank) << " bg: " << (*bankgroup) << " rank: " << (*rank) << " channel " << (*channel) << std::endl;
+    std::cerr << "Decoded local addr: " << std::hex << (*local_addr) << " other addr: " << laddr2 << std::endl;
+  std::cerr << "Ro pos " << config_->ro_pos << " ro mask " << config_->ro_mask << std::endl;
+  std::cerr << "Co pos " << config_->co_pos << " co mask " << config_->co_mask << std::endl;
 }
 
 void MemorySystem::ClockTick() { dram_system_->ClockTick(); }
@@ -104,25 +109,99 @@ int MemorySystem::GetConfigParameter(std::string identifier) {
         return config_->shift_bits;
     }
     if (identifier == "gdl_width") {
-        return config_->device_width;
+        return config_->device_width * config_->BL;
+    }
+    if (identifier == "ro_mask") {
+        return config_->ro_mask;
+    }
+    if (identifier == "co_mask") {
+        return config_->co_mask;
+    }
+    if (identifier == "ba_mask") {
+        return config_->ba_mask;
+    }
+    if (identifier == "bg_mask") {
+        return config_->bg_mask;
+    }
+    if (identifier == "ra_mask") {
+        return config_->ra_mask;
+    }
+    if (identifier == "ch_mask") {
+        return config_->ch_mask;
+    }
+    if (identifier == "ro_pos") {
+        return config_->ro_pos;
+    }
+    if (identifier == "co_pos") {
+        return config_->co_pos;
+    }
+    if (identifier == "ba_pos") {
+        return config_->ba_pos;
+    }
+    if (identifier == "bg_pos") {
+        return config_->bg_pos;
+    }
+    if (identifier == "ra_pos") {
+        return config_->ra_pos;
+    }
+    if (identifier == "ch_pos") {
+        return config_->ch_pos;
     }
     return -1;
 }
 
-uint64_t MemorySystem::GetBankLocalAddr(uint64_t channel, uint64_t rank, uint64_t bankgroup, uint64_t bank, uint64_t hex_addr) {
-    if (hex_addr > (config_->ro_mask << config_->ro_pos 
-                    | (config_->co_mask << config_->co_pos))) {
+uint64_t MemorySystem::GetBankLocalAddr(uint64_t channel, uint64_t rank,
+                                        uint64_t bankgroup, uint64_t bank,
+                                        uint64_t hex_addr) {
+    uint64_t pos = count_ones(config_->co_mask);
+    uint64_t local_mask = (config_->ro_mask << pos) + config_->co_mask;
+    if ((hex_addr & local_mask) != hex_addr) {
         std::cerr << "Bank address out of bounds: " 
-                  << std::hex << hex_addr << " > " 
-                  << (config_->ro_mask | config_->co_mask) << std::endl;
+                  << std::hex << hex_addr << " (local address) > " 
+                  << local_mask << " (maximum allowed)" << std::endl;
         AbruptExit(__FILE__, __LINE__);
     }
+    // bounds masking is unnecessary here because we just did so above
+    uint64_t row = hex_addr >> pos;
+    uint64_t col = hex_addr & (config_->co_mask);
 
-    hex_addr += (channel & (config_->ch_mask)) << config_->ch_pos;
-    hex_addr += (rank & (config_->ra_mask)) << config_->ra_pos;
-    hex_addr += (bankgroup & (config_->bg_mask)) << config_->bg_pos;
-    hex_addr += (bank & (config_->ba_mask)) << config_->ba_pos;
-    return hex_addr <<= (config_->shift_bits);
+    uint64_t global_addr = (channel & (config_->ch_mask)) << config_->ch_pos;
+    global_addr += (rank & (config_->ra_mask)) << config_->ra_pos;
+    global_addr += (bankgroup & (config_->bg_mask)) << config_->bg_pos;
+    global_addr += (bank & (config_->ba_mask)) << config_->ba_pos;
+    global_addr += row << config_->ro_pos;
+    global_addr += col << config_->co_pos;
+    global_addr <<= config_->shift_bits;
+    std::cerr << "Calculated address: " << std::hex << hex_addr << std::endl;
+    return global_addr;
+}
+
+uint64_t MemorySystem::GetSpatialGlobalAddr(uint64_t channel, uint64_t rank,
+                                        uint64_t bankgroup, uint64_t bank,
+                                        uint64_t hex_addr) {
+    uint64_t pos = count_ones(config_->co_mask);
+    uint64_t local_mask = (config_->ro_mask << pos) + config_->co_mask;
+    if ((hex_addr & local_mask) != hex_addr) {
+        std::cerr << "Bank address out of bounds: " 
+                  << std::hex << hex_addr << " (local address) > " 
+                  << local_mask << " (maximum allowed)" << std::endl;
+        AbruptExit(__FILE__, __LINE__);
+    }
+    // bounds masking is unnecessary here because we just did so above
+    uint64_t row = hex_addr >> pos;
+    uint64_t col = hex_addr & (config_->co_mask);
+
+    uint64_t global_addr = col;
+    global_addr += row << pos;
+    pos += count_ones(config_->ro_mask);
+    global_addr += (bank & (config_->ba_mask)) << pos;
+    pos += count_ones(config_->ba_mask);
+    global_addr += (bankgroup & (config_->bg_mask)) << pos;
+    pos += count_ones(config_->bg_mask);
+    global_addr += (rank & (config_-> ra_mask));
+    pos += count_ones(config_->ra_mask);
+    global_addr += (channel & (config_->ch_mask));
+    return global_addr;
 }
 
 void MemorySystem::PrintStats() const { dram_system_->PrintStats(); }

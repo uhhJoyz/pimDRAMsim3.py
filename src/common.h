@@ -1,6 +1,7 @@
 #ifndef __COMMON_H
 #define __COMMON_H
 
+#include <cstdint>
 #include <stdint.h>
 #include <iostream>
 #include <vector>
@@ -203,6 +204,15 @@ public:
     }
   }
 };
+
+inline uint64_t count_ones(uint64_t n) {
+  uint64_t count = 0;
+  while (n > 0) {
+    count = n % 2 == 1 ? count + 1 : count;
+    n >>= 1;
+  }
+  return count;
+}
 
 }  // namespace dramsim3
 #endif
