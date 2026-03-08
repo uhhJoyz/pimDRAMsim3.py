@@ -172,7 +172,6 @@ uint64_t MemorySystem::GetBankLocalAddr(uint64_t channel, uint64_t rank,
     global_addr += row << config_->ro_pos;
     global_addr += col << config_->co_pos;
     global_addr <<= config_->shift_bits;
-    std::cerr << "Calculated address: " << std::hex << hex_addr << std::endl;
     return global_addr;
 }
 
