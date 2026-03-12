@@ -54,7 +54,7 @@ void MemorySystem::GetBytes(size_t start_addr, int64_t *data_index, size_t *star
     (*start_byte) = (start_addr - base_addr) + offset;
 }
 
-void MemorySystem::GetLocationFromAddress(uint64_t* channel, uint64_t* rank,
+void MemorySystem::GlobalToLocalAddr(uint64_t* channel, uint64_t* rank,
                                 uint64_t* bankgroup, uint64_t* bank, 
                                 uint64_t* local_addr, uint64_t hex_addr) {
     auto addr = config_->AddressMapping(hex_addr);
@@ -67,10 +67,6 @@ void MemorySystem::GetLocationFromAddress(uint64_t* channel, uint64_t* rank,
     uint64_t r = addr.row;
     uint64_t c = addr.column;
     uint64_t laddr2 = (r << config_->ro_pos) + (c << config_->co_pos);
-    std::cerr << "Decoded bank: " << std::hex << (*bank) << " bg: " << (*bankgroup) << " rank: " << (*rank) << " channel " << (*channel) << std::endl;
-    std::cerr << "Decoded local addr: " << std::hex << (*local_addr) << " other addr: " << laddr2 << std::endl;
-  std::cerr << "Ro pos " << config_->ro_pos << " ro mask " << config_->ro_mask << std::endl;
-  std::cerr << "Co pos " << config_->co_pos << " co mask " << config_->co_mask << std::endl;
 }
 
 void MemorySystem::ClockTick() { dram_system_->ClockTick(); }
@@ -150,7 +146,7 @@ int MemorySystem::GetConfigParameter(std::string identifier) {
     return -1;
 }
 
-uint64_t MemorySystem::GetBankLocalAddr(uint64_t channel, uint64_t rank,
+uint64_t MemorySystem::BankLocalToGlobalAddr(uint64_t channel, uint64_t rank,
                                         uint64_t bankgroup, uint64_t bank,
                                         uint64_t hex_addr) {
     uint64_t pos = count_ones(config_->co_mask);

@@ -164,7 +164,7 @@ EXPORT bool memsys_add_transaction_to_bank(memsys_t memsys, uint64_t channel,
                                            bool is_write, bool is_pim) {
   Wrapper *w = reinterpret_cast<Wrapper *>(memsys);
   if (w && w->memsys) {
-    uint64_t reversed_addr = w->memsys->GetBankLocalAddr(
+    uint64_t reversed_addr = w->memsys->BankLocalToGlobalAddr(
         channel, rank, bankgroup, bank, hex_address);
     return w->memsys->AddTransaction(reversed_addr, is_write, is_pim);
   }
@@ -216,7 +216,7 @@ EXPORT uint64_t memsys_get_address_from_physical_location(
     uint64_t bank, uint64_t hex_address) {
   Wrapper *w = reinterpret_cast<Wrapper *>(memsys);
   if (w && w->memsys) {
-    return w->memsys->GetBankLocalAddr(channel, rank, bankgroup, bank,
+    return w->memsys->BankLocalToGlobalAddr(channel, rank, bankgroup, bank,
                                        hex_address);
   }
   return 0;
@@ -227,7 +227,7 @@ EXPORT void memsys_get_physical_location_from_address(
     uint64_t* bank, uint64_t* local_addr, uint64_t hex_address) {
   Wrapper *w = reinterpret_cast<Wrapper *>(memsys);
   if (w && w->memsys) {
-    w->memsys->GetLocationFromAddress(channel, rank, bankgroup,
+    w->memsys->GlobalToLocalAddr(channel, rank, bankgroup,
                                       bank, local_addr, hex_address);
   }
 }
